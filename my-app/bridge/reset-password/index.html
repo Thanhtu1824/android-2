@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Redirecting...</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            padding: 24px;
+        }
+
+        .muted {
+            opacity: 0.7;
+        }
+
+        code {
+            background: #f2f2f2;
+            padding: 2px 6px;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+
+<body>
+    <h3>Đang mở ứng dụng...</h3>
+    <p class="muted">Nếu không tự mở, hãy thử mở lại link bằng trình duyệt (Safari/Chrome).</p>
+
+    <script>
+        // Bridge nhận:
+        // - app: deep link của Expo app (được encodeURIComponent từ app)
+        //   ví dụ: exp://172.20.10.2:8081/--/reset-password
+        // - Supabase thường trả token ở hash (#access_token=...&refresh_token=...&type=recovery)
+        // Mục tiêu: redirect sang appUrl và chuyển hash -> query để app dễ đọc.
+
+        const qs = new URLSearchParams(location.search);
+        const appParam = qs.get("app"); // encoded deep link
+        const hash = (location.hash || "").replace(/^#/, ""); // remove leading #
+
+        if (!appParam) {
+            document.body.innerHTML =
+                "<h3>Thiếu tham số <code>app</code></h3><p class='muted'>Vui lòng quay lại ứng dụng và gửi lại yêu cầu quên mật khẩu.</p>";
+        } else {
+            const appUrl = decodeURIComponent(appParam);
+
+            // nếu appUrl đã có ?, nối &; nếu chưa có, nối ?
+            const joiner = appUrl.includes("?") ? "&" : "?";
+
+            // Supabase token ở hash -> chuyển sang query để reset-password.tsx parse dễ
+            const target = hash ? `${appUrl}${joiner}${hash}` : appUrl;
+
+            // Điều hướng sang app
+            location.replace(target);
+        }
+    </script>
+</body>
+
+</html>
