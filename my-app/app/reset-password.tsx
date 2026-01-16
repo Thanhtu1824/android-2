@@ -9,9 +9,10 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
+import * as Linking from "expo-linking";
 
 function validateStrongPassword(pw: string) {
   const errors: string[] = [];
@@ -21,6 +22,20 @@ function validateStrongPassword(pw: string) {
   if (!/[0-9]/.test(pw)) errors.push("Có số");
   if (!/[^A-Za-z0-9]/.test(pw)) errors.push("Có ký tự đặc biệt");
   return errors;
+}
+
+function normalizeParam(v: string | string[] | undefined) {
+  if (!v) return "";
+  return Array.isArray(v) ? v[0] : v;
+}
+
+function parseTokensFromUrl(url: string) {
+  const parsed = Linking.parse(url);
+  const q = (parsed.queryParams ?? {}) as Record<string, any>;
+  const access_token = normalizeParam(q.access_token);
+  const refresh_token = normalizeParam(q.refresh_token);
+  const type = normalizeParam(q.type);
+  return { access_token, refresh_token, type };
 }
 
 export default function ResetPassword() {
@@ -35,32 +50,74 @@ export default function ResetPassword() {
 
   const confirmRef = useRef<TextInput>(null);
 
-  // ✅ check có session (recovery) không
+  // ✅ expo-router sẽ nhận query params từ deeplink
+  const params = useLocalSearchParams<{
+    access_token?: string;
+    refresh_token?: string;
+    type?: string;
+  }>();
+
   useEffect(() => {
     let mounted = true;
 
-    (async () => {
+    const failAndBack = () => {
+      Alert.alert(
+        "Liên kết không hợp lệ",
+        "Link đặt lại mật khẩu có thể đã hết hạn hoặc đã được dùng. Vui lòng gửi lại yêu cầu quên mật khẩu."
+      );
+      router.replace("/(auth)/forgot" as any);
+    };
+
+    const bootstrap = async () => {
       try {
+        // 1) Ưu tiên token từ params (expo-router)
+        let access_token = normalizeParam(params.access_token);
+        let refresh_token = normalizeParam(params.refresh_token);
+        let type = normalizeParam(params.type);
+
+        // 2) Fallback: lấy từ initialURL (phòng trường hợp params chưa kịp có)
+        if (!access_token || !refresh_token) {
+          const initialUrl = await Linking.getInitialURL();
+          if (initialUrl) {
+            const t = parseTokensFromUrl(initialUrl);
+            access_token = access_token || t.access_token;
+            refresh_token = refresh_token || t.refresh_token;
+            type = type || t.type;
+          }
+        }
+
+        // 3) Nếu có token recovery -> setSession TRƯỚC
+        if (access_token && refresh_token && (type === "recovery" || !type)) {
+          const { error } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+          if (error) {
+            // setSession fail thường là do token hết hạn/đã dùng
+            failAndBack();
+            return;
+          }
+        }
+
+        // 4) Giờ mới check session
         const { data, error } = await supabase.auth.getSession();
         if (!mounted) return;
 
         if (error || !data.session) {
-          Alert.alert(
-            "Liên kết không hợp lệ",
-            "Link đặt lại mật khẩu có thể đã hết hạn hoặc đã được dùng. Vui lòng gửi lại yêu cầu quên mật khẩu."
-          );
-          router.replace("/(auth)/forgot" as any);
+          failAndBack();
           return;
         }
       } finally {
         if (mounted) setChecking(false);
       }
-    })();
+    };
+
+    bootstrap();
 
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [params.access_token, params.refresh_token, params.type]);
 
   const pwRules = useMemo(() => validateStrongPassword(password), [password]);
 
@@ -90,27 +147,11 @@ export default function ResetPassword() {
       const { error } = await supabase.auth.updateUser({ password });
 
       if (error) {
-        const msg = (error.message ?? "").toLowerCase();
-        const looksExpired =
-          msg.includes("expired") ||
-          msg.includes("invalid") ||
-          msg.includes("session") ||
-          msg.includes("token");
-
-        if (looksExpired) {
-          Alert.alert(
-            "Liên kết hết hạn",
-            "Link đặt lại mật khẩu đã hết hạn hoặc đã được dùng. Vui lòng gửi lại yêu cầu quên mật khẩu."
-          );
-          router.replace("/(auth)/forgot" as any);
-          return;
-        }
-
         Alert.alert("Lỗi", error.message);
         return;
       }
 
-      // ✅ sạch session recovery
+      // (tuỳ bạn) có thể signOut để bắt user login lại
       await supabase.auth.signOut();
 
       Alert.alert("Thành công", "Đã cập nhật mật khẩu. Vui lòng đăng nhập lại.");
@@ -137,7 +178,6 @@ export default function ResetPassword() {
       <View style={styles.wrap}>
         <Text style={styles.title}>Đặt lại mật khẩu</Text>
 
-        {/* Password */}
         <View style={[styles.inputRow, password.length > 0 && !!passwordError && styles.inputError]}>
           <TextInput
             style={styles.inputFlex}
@@ -157,7 +197,7 @@ export default function ResetPassword() {
             disabled={loading}
             style={styles.eyeBtn}
           >
-            <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#111827" />
+            <Ionicons name={showPassword ? "eye" : "eye-off"} size={20} color="#111827" />
           </TouchableOpacity>
         </View>
 
@@ -171,7 +211,6 @@ export default function ResetPassword() {
         )}
         {password.length > 0 && !!passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
 
-        {/* Confirm */}
         <View style={[styles.inputRow, confirm.length > 0 && !!confirmError && styles.inputError]}>
           <TextInput
             ref={confirmRef}
@@ -191,7 +230,7 @@ export default function ResetPassword() {
             disabled={loading}
             style={styles.eyeBtn}
           >
-            <Ionicons name={showConfirm ? "eye-off" : "eye"} size={20} color="#111827" />
+            <Ionicons name={showConfirm ? "eye" : "eye-off"} size={20} color="#111827" />
           </TouchableOpacity>
         </View>
 
@@ -203,11 +242,7 @@ export default function ResetPassword() {
           activeOpacity={0.9}
           disabled={!canSubmit}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.btnText}>Cập nhật mật khẩu</Text>
-          )}
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Cập nhật mật khẩu</Text>}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -234,8 +269,6 @@ const styles = StyleSheet.create({
   inputFlex: { flex: 1, color: "#111827" },
 
   eyeBtn: { paddingLeft: 10, paddingVertical: 6 },
-  eyeText: { fontSize: 18 },
-
   inputError: { borderColor: "#ef4444" },
 
   errorText: { color: "#ef4444", marginBottom: 10, fontWeight: "700" },

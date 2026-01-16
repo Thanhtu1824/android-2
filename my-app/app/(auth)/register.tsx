@@ -149,7 +149,7 @@ export default function Register() {
             disabled={isBusy}
             style={styles.eyeBtn}
           >
-           <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#111827" />
+           <Ionicons name={showPassword ? "eye" : "eye-off"} size={20} color="#111827" />
           </TouchableOpacity>
         </View>
 
@@ -183,7 +183,7 @@ export default function Register() {
             disabled={isBusy}
             style={styles.eyeBtn}
           >
-            <Ionicons name={showConfirm ? "eye-off" : "eye"} size={20} color="#111827" />
+            <Ionicons name={showConfirm ? "eye" : "eye-off"} size={20} color="#111827" />
           </TouchableOpacity>
         </View>
         {!!confirmError && confirm.length > 0 && <Text style={styles.errorText}>{confirmError}</Text>}

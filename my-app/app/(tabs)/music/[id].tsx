@@ -1,3 +1,4 @@
+// app/(tabs)/music/[id].tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -7,7 +8,6 @@ import {
   ActivityIndicator,
   Image,
   Share,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
@@ -154,8 +154,6 @@ export default function PlayerScreen() {
         setPlaying(false);
 
         const url = getPublicUrl(current.file_path);
-
-        // (optional) debug
         console.log("PLAY URL:", url);
 
         await Audio.setAudioModeAsync({
@@ -266,12 +264,7 @@ export default function PlayerScreen() {
     });
   };
 
-  const onToggleFavorite = async () => {
-    if (!current) return;
-    const next = await toggleFav(current.id);
-    setFavSet(next);
-  };
-
+  // ✅ yêu cầu đăng nhập trước khi làm action protected
   const requireLogin = async (redirectPath: string) => {
     const { data } = await supabase.auth.getSession();
     if (!data.session) {
@@ -279,6 +272,17 @@ export default function PlayerScreen() {
       return false;
     }
     return true;
+  };
+
+  // ✅ THÍCH: nếu chưa login -> bắt login
+  const onToggleFavorite = async () => {
+    if (!current) return;
+
+    const ok = await requireLogin(`/music/${current.id}`);
+    if (!ok) return;
+
+    const next = await toggleFav(current.id);
+    setFavSet(next);
   };
 
   const onAddToPlaylist = async () => {

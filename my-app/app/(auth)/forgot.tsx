@@ -11,10 +11,14 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
-import { makeRedirectUri } from "expo-auth-session";
-import Constants from "expo-constants";
+import * as Linking from "expo-linking";
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+// ✅ Netlify bridge domain của bạn
+// Nếu bridge của bạn nằm ở /reset-password/ thì đổi thành:
+// const BRIDGE_BASE = "https://amazing-treacle-e4c3d2.netlify.app/reset-password/";
+const BRIDGE_BASE = "https://amazing-treacle-e4c3d2.netlify.app/";
 
 export default function Forgot() {
   const [email, setEmail] = useState("");
@@ -38,21 +42,14 @@ export default function Forgot() {
   const isBusy = loading || isCooldown;
   const canSubmit = !emailError && !loading && !isCooldown;
 
-  // ✅ Expo Go: dùng Auth Proxy để Supabase chấp nhận redirect_to
+  // ✅ app deep link tới màn reset-password trong Expo Router
+  // Expo Go sẽ ra dạng exp://.../--/reset-password
+  const appUrl = useMemo(() => Linking.createURL("reset-password"), []);
+
+  // ✅ redirectTo gửi lên Supabase: Netlify bridge + tham số app
   const redirectTo = useMemo(() => {
-    const owner = (Constants.expoConfig as any)?.owner;
-    const slug = (Constants.expoConfig as any)?.slug;
-
-    // projectNameForProxy = "owner/slug" nếu có owner; nếu không có owner thì dùng slug
-    const projectNameForProxy =
-      owner && slug ? `${owner}/${slug}` : slug ? slug : undefined;
-
-    return makeRedirectUri({
-      useProxy: true,
-      projectNameForProxy,
-      path: "reset-password",
-    });
-  }, []);
+    return `${BRIDGE_BASE}?app=${encodeURIComponent(appUrl)}`;
+  }, [appUrl]);
 
   const handleGoHome = () => {
     if (loading) return;
@@ -66,13 +63,12 @@ export default function Forgot() {
       Alert.alert("Lỗi", "Vui lòng kiểm tra lại email");
       return;
     }
-
     if (isCooldown) return;
 
     try {
       setLoading(true);
 
-      // ✅ kiểm tra redirectTo đang gửi lên Supabase
+      console.log("RESET appUrl =", appUrl);
       console.log("RESET redirectTo =", redirectTo);
 
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
@@ -102,7 +98,6 @@ export default function Forgot() {
       );
 
       setCooldownUntil(Date.now() + 60_000);
-
       router.replace("/(auth)/login" as any);
     } catch (e: any) {
       Alert.alert("Lỗi", e?.message ?? "Có lỗi xảy ra");

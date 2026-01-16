@@ -80,6 +80,11 @@ export default function HomeScreen() {
     router.push("/(protected)/premium" as any);
   }, []);
 
+  // ✅ mở trang yêu thích
+  const goFavorites = useCallback(() => {
+    router.push("/(protected)/favorites" as any);
+  }, []);
+
   // ✅ Bấm playlist -> mở màn chi tiết playlist
   const onPressMyPlaylist = useCallback((playlistId: string) => {
     router.push({
@@ -131,7 +136,7 @@ export default function HomeScreen() {
         {/* QUICK ACTIONS */}
         <View style={styles.quickRow}>
           <QuickButton text="Gần đây" onPress={() => {}} />
-          <QuickButton text="Yêu thích" onPress={() => {}} />
+          <QuickButton text="Yêu thích" onPress={goFavorites} />
           <QuickButton text="Tải xuống" onPress={() => {}} />
         </View>
 
